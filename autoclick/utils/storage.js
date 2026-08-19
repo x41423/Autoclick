@@ -1,15 +1,40 @@
 // utils/storage.js
 // 脚本存储管理（增删改查）
+// 存储结构：每个脚本独立键 script:<id>，scriptIds 记录顺序，支持旧版整数组迁移
 
-const SCRIPTS_KEY = 'scripts';
+const LEGACY_SCRIPTS_KEY = 'scripts';
+const SCRIPT_PREFIX = 'script:';
+const SCRIPT_IDS_KEY = 'scriptIds';
 const DEFAULT_SCRIPT_KEY = 'defaultScriptId';
+
+/**
+ * 迁移旧版数据（整数组 scripts 键 → 按脚本独立存储）
+ */
+async function migrateLegacyData() {
+  const legacy = await chrome.storage.local.get(LEGACY_SCRIPTS_KEY);
+  const list = legacy[LEGACY_SCRIPTS_KEY];
+  if (!list || !Array.isArray(list)) return;
+  const items = {};
+  for (const script of list) {
+    if (script && script.id) items[SCRIPT_PREFIX + script.id] = script;
+  }
+  items[SCRIPT_IDS_KEY] = list.filter(s => s && s.id).map(s => s.id);
+  await chrome.storage.local.set(items);
+  await chrome.storage.local.remove(LEGACY_SCRIPTS_KEY);
+}
 
 /**
  * 获取所有脚本列表
  */
 export async function getScripts() {
-  const result = await chrome.storage.local.get(SCRIPTS_KEY);
-  return result[SCRIPTS_KEY] || [];
+  await migrateLegacyData();
+  const result = await chrome.storage.local.get(SCRIPT_IDS_KEY);
+  const ids = result[SCRIPT_IDS_KEY] || [];
+  if (ids.length === 0) return [];
+  const scripts = await chrome.storage.local.get(ids.map(id => SCRIPT_PREFIX + id));
+  return ids
+    .map(id => scripts[SCRIPT_PREFIX + id])
+    .filter(Boolean);
 }
 
 /**
@@ -17,17 +42,20 @@ export async function getScripts() {
  * @param {object} script - { id, name, actions, version? }
  */
 export async function saveScript(script) {
-  const scripts = await getScripts();
-  const idx = scripts.findIndex(s => s.id === script.id);
-  if (idx >= 0) {
-    scripts[idx] = { ...scripts[idx], ...script };
-  } else {
-    if (!script.id) {
-      script.id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-    }
-    scripts.push(script);
+  await migrateLegacyData();
+  if (!script.id) {
+    script.id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
   }
-  await chrome.storage.local.set({ [SCRIPTS_KEY]: scripts });
+  const result = await chrome.storage.local.get(SCRIPT_IDS_KEY);
+  const ids = result[SCRIPT_IDS_KEY] || [];
+  const isNew = !ids.includes(script.id);
+  if (isNew) {
+    ids.push(script.id);
+  }
+  await chrome.storage.local.set({
+    [SCRIPT_PREFIX + script.id]: script,
+    [SCRIPT_IDS_KEY]: ids
+  });
   return script;
 }
 
@@ -35,9 +63,13 @@ export async function saveScript(script) {
  * 删除脚本
  */
 export async function deleteScript(id) {
-  const scripts = await getScripts();
-  const filtered = scripts.filter(s => s.id !== id);
-  await chrome.storage.local.set({ [SCRIPTS_KEY]: filtered });
+  await migrateLegacyData();
+  const result = await chrome.storage.local.get(SCRIPT_IDS_KEY);
+  const ids = result[SCRIPT_IDS_KEY] || [];
+  await chrome.storage.local.set({
+    [SCRIPT_IDS_KEY]: ids.filter(sid => sid !== id)
+  });
+  await chrome.storage.local.remove(SCRIPT_PREFIX + id);
 }
 
 /**
@@ -88,22 +120,15 @@ export async function importScripts(jsonStr, strategy = 'rename') {
   }
   const existing = await getScripts();
   const existingIds = new Set(existing.map(s => s.id));
-  const newScripts = [];
   for (const s of data.scripts) {
+    if (!s.id) {
+      s.id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+    }
     if (existingIds.has(s.id) && strategy === 'rename') {
-      // 生成新 id 并修改名称
-      const newId = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
-      s.id = newId;
+      s.id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
       s.name = s.name + ' (导入)';
     }
-    newScripts.push(s);
+    await saveScript(s);
   }
-  // 合并（覆盖或新增）
-  const map = new Map(existing.map(s => [s.id, s]));
-  for (const s of newScripts) {
-    map.set(s.id, s);
-  }
-  const merged = Array.from(map.values());
-  await chrome.storage.local.set({ [SCRIPTS_KEY]: merged });
-  return merged;
+  return getScripts();
 }

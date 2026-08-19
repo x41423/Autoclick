@@ -18,6 +18,10 @@
   let locked = false;
   let targetData = null;
   let pickCount = 0;
+  let controlBarDiv = null;
+  let statusEl = null;
+  let pauseBtn = null;
+  let cancelBtn = null;
 
   // ---------- 创建遮罩 ----------
   function createOverlay() {
@@ -73,6 +77,132 @@
     document.body.appendChild(tooltipDiv);
   }
 
+  // ---------- 浮动控制条 ----------
+  function createControlBar() {
+    if (controlBarDiv) return;
+    controlBarDiv = document.createElement('div');
+    controlBarDiv.id = 'mch-picker-controls';
+    controlBarDiv.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000002;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      background: rgba(0,0,0,0.85);
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      font-family: system-ui, sans-serif;
+      user-select: none;
+    `;
+
+    const btnBase = `
+      width: 38px;
+      height: 38px;
+      border: none;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+    `;
+
+    statusEl = document.createElement('span');
+    statusEl.id = 'mch-picker-status';
+    statusEl.style.cssText = `
+      color: #fff;
+      font-size: 12px;
+      padding: 0 8px;
+      max-width: 280px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      align-self: center;
+    `;
+
+    pauseBtn = document.createElement('button');
+    pauseBtn.id = 'mch-picker-pause';
+    pauseBtn.textContent = '⏸';
+    pauseBtn.title = '暂停拾取（空格）';
+    pauseBtn.style.cssText = btnBase;
+
+    cancelBtn = document.createElement('button');
+    cancelBtn.id = 'mch-picker-cancel';
+    cancelBtn.textContent = '✕';
+    cancelBtn.title = '退出拾取（ESC）';
+    cancelBtn.style.cssText = btnBase;
+
+    // pointerdown 先关闭任何原生弹窗（如 select 下拉），避免首击被弹窗关闭吞掉
+    const closeNativePopup = () => {
+      const ae = document.activeElement;
+      if (ae && typeof ae.blur === 'function') ae.blur();
+    };
+
+    pauseBtn.addEventListener('pointerdown', closeNativePopup);
+    cancelBtn.addEventListener('pointerdown', closeNativePopup);
+    pauseBtn.addEventListener('click', () => togglePause());
+    cancelBtn.addEventListener('click', () => {
+      deactivate();
+      chrome.runtime.sendMessage({ type: 'pickerCancel' });
+    });
+
+    controlBarDiv.appendChild(statusEl);
+    controlBarDiv.appendChild(pauseBtn);
+    controlBarDiv.appendChild(cancelBtn);
+    document.body.appendChild(controlBarDiv);
+  }
+
+  function updateControlBarStatus() {
+    if (!statusEl) return;
+    let text = '';
+    if (paused) {
+      text = '⏸ 已暂停 · 空格/▶ 继续';
+    } else if (locked) {
+      text = '✅ 已锁定 · Enter 确认 · ESC 取消';
+    } else if (continuousMode) {
+      text = `🔄 连续拾取 ${pickCount} 个 · 点击锁定 · Enter 继续 · 空格暂停`;
+    } else {
+      text = '🎯 点击锁定目标 · Enter 确认';
+    }
+    statusEl.textContent = text;
+  }
+
+  function removeControlBar() {
+    if (controlBarDiv) {
+      controlBarDiv.remove();
+      controlBarDiv = null;
+    }
+    statusEl = null;
+    pauseBtn = null;
+    cancelBtn = null;
+  }
+
+  function togglePause() {
+    if (locked) return;
+    paused = !paused;
+    if (highlightDiv) {
+      if (paused) {
+        highlightDiv.style.borderColor = '#888';
+        highlightDiv.style.background = 'rgba(136, 136, 136, 0.1)';
+      } else {
+        highlightDiv.style.borderColor = '#1a73e8';
+        highlightDiv.style.background = 'rgba(26, 115, 232, 0.15)';
+        const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+        if (el) {
+          highlightedElement = el;
+          updateHighlight(el);
+        }
+      }
+    }
+    if (pauseBtn) {
+      pauseBtn.textContent = paused ? '▶' : '⏸';
+      pauseBtn.title = paused ? '继续拾取' : '暂停拾取（空格）';
+    }
+    updateTooltipText();
+  }
+
   // ---------- 高亮与提示 ----------
   function updateHighlight(element) {
     if (!element || !highlightDiv) return;
@@ -113,7 +243,7 @@
     if (!tooltipDiv) return;
     let text = '';
     if (paused) {
-      text = '⏸️ 已暂停，点击页面展开菜单 (空格继续)';
+      text = '⏸️ 已暂停，点击页面展开菜单（空格 / ▶ 按钮继续）';
     } else if (locked) {
       text = '✅ 已锁定，方向键微调 (±1px) | Enter确认 | ESC取消';
     } else if (continuousMode) {
@@ -127,6 +257,7 @@
       tooltipDiv.style.top = '20px';
       tooltipDiv.style.display = 'block';
     }
+    updateControlBarStatus();
   }
 
   // ---------- 激活与停用 ----------
@@ -143,6 +274,7 @@
       tooltipDiv.remove();
       tooltipDiv = null;
     }
+    removeControlBar();
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('click', onMouseClick, true);
     document.removeEventListener('keydown', onKeyDown);
@@ -151,7 +283,6 @@
     continuousMode = false;
     locked = false;
     pickCount = 0;
-    window.__picker_initialized = false;
   }
 
   function activate(continuous = false) {
@@ -168,6 +299,7 @@
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('click', onMouseClick, true);
     document.addEventListener('keydown', onKeyDown);
+    createControlBar();
     updateTooltipText();
     tooltipDiv.style.left = '20px';
     tooltipDiv.style.top = '20px';
@@ -183,20 +315,29 @@
   }
 
   // ---------- 鼠标事件 ----------
+  let rafPending = false;
   function onMouseMove(e) {
-    if (paused) return;
-    if (locked) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (el && el !== overlayDiv && el !== highlightDiv && el !== tooltipDiv) {
-      highlightedElement = el;
-      updateHighlight(el);
-    } else {
-      clearHighlight();
-    }
+    if (paused || locked) return;
+    if (rafPending) return;
+    rafPending = true;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    requestAnimationFrame(() => {
+      rafPending = false;
+      const el = document.elementFromPoint(clientX, clientY);
+      if (el && el !== overlayDiv && el !== highlightDiv && el !== tooltipDiv && el !== controlBarDiv && el !== pauseBtn && el !== cancelBtn) {
+        highlightedElement = el;
+        updateHighlight(el);
+      } else {
+        clearHighlight();
+      }
+    });
   }
 
   function onMouseClick(e) {
   if (paused) return;
+  // 点击控制条（暂停/退出按钮）时放行，交由按钮处理
+  if (e.target === controlBarDiv || e.target === pauseBtn || e.target === cancelBtn) return;
   e.preventDefault();
   e.stopPropagation();
   if (locked) return;
@@ -283,31 +424,28 @@
 
   // ---------- 键盘事件 ----------
   function onKeyDown(e) {
+    const isSpace = (e.key === ' ' || e.key === 'Space');
+
+    // 暂停时：页面正常接收键盘输入，仅拦截非文本控件上的空格用于继续拾取
+    if (paused) {
+      if (!isSpace) return;
+      const ae = document.activeElement;
+      const isEditable = ae && (
+        ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable
+      );
+      if (isEditable) return;
+      e.preventDefault();
+      e.stopPropagation();
+      togglePause();
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
     // 空格键：暂停/继续
-    if (e.key === ' ' || e.key === 'Space') {
-      if (!locked) {
-        paused = !paused;
-        if (paused) {
-          if (highlightDiv) {
-            highlightDiv.style.borderColor = '#888';
-            highlightDiv.style.background = 'rgba(136, 136, 136, 0.1)';
-          }
-        } else {
-          if (highlightDiv) {
-            highlightDiv.style.borderColor = '#1a73e8';
-            highlightDiv.style.background = 'rgba(26, 115, 232, 0.15)';
-          }
-          const el = document.elementFromPoint(window.innerWidth/2, window.innerHeight/2);
-          if (el) {
-            highlightedElement = el;
-            updateHighlight(el);
-          }
-        }
-        updateTooltipText();
-      }
+    if (isSpace) {
+      togglePause();
       return;
     }
 
@@ -329,9 +467,6 @@
       }
       return;
     }
-
-    // 暂停时忽略其他按键
-    if (paused) return;
 
     if (!locked) return;
 

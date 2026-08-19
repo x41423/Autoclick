@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MouseClick Helper",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "自动化点击助手，支持坐标拾取、抗缩放回放、快捷键控制",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -19,6 +20,9 @@
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "48": "assets/icon-48.png",
       "128": "assets/icon-128.png"
     }
   },
@@ -35,18 +39,5 @@
       },
       "description": "紧急停止当前脚本"
     }
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content/player.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["content/picker.js", "content/player.js"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }

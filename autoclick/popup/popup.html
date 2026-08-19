@@ -7,38 +7,72 @@
 </head>
 <body>
   <div id="app">
-    <h2>🐭 脚本列表</h2>
+    <h2>🐭 MouseClick Helper</h2>
+
+    <!-- 运行状态条 -->
+    <div id="run-status" style="display:none;">
+      <div class="run-row">
+        <span id="run-name" class="run-name"></span>
+        <span id="run-progress" class="run-progress"></span>
+      </div>
+      <div class="progress-track"><div id="run-progress-bar"></div></div>
+      <div class="run-row">
+        <span id="run-remaining">执行中...</span>
+        <div class="run-btns">
+          <button id="run-pause" class="warn-btn">⏸ 暂停</button>
+          <button id="run-stop" class="danger">■ 停止</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 脚本列表 -->
     <div id="script-list"></div>
 
+    <!-- 新建脚本 -->
+    <div id="new-script-row" style="display:none;">
+      <input id="new-script-input" type="text" placeholder="脚本名称">
+      <button id="new-script-ok" class="primary">确定</button>
+      <button id="new-script-cancel">取消</button>
+    </div>
+    <button id="btn-new" class="full-width">➕ 新建脚本</button>
+
     <!-- 编辑区域 -->
-    <div id="editor" style="display:none; margin-top:12px; border-top:1px solid #ccc; padding-top:8px;">
+    <div id="editor" style="display:none;">
       <h3 id="edit-script-name"></h3>
-      <div id="action-list" style="max-height:200px; overflow-y:auto; border:1px solid #eee; padding:4px; margin-bottom:6px;"></div>
-      <div style="display:flex; gap:6px; flex-wrap:wrap;">
-        <button id="add-delay">⏱️ 添加延迟</button>
-        <button id="add-click">🎯 添加点击</button>
-        <button id="save-editor" style="background:#1a73e8;color:white;">💾 保存</button>
+      <div id="action-list"></div>
+      <div class="editor-row">
+        <input id="delay-input" type="number" min="0" step="100" value="1000">
+        <button id="add-delay">⏱️ 添加延迟(ms)</button>
+      </div>
+      <div class="editor-row">
+        <button id="add-click" class="primary">🎯 添加点击</button>
+        <label class="toggle-label" title="连续拾取：一次可拾取多个点击点">
+          <input type="checkbox" id="continuous-mode"> 🔁 连续拾取
+        </label>
+      </div>
+      <div class="editor-row">
+        <button id="save-editor" class="primary">💾 保存</button>
         <button id="cancel-editor">❌ 取消</button>
       </div>
     </div>
 
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-        <label style="font-size:13px; cursor:pointer;">
-        <input type="checkbox" id="continuous-mode"> 🔁 连续拾取模式
-        </label>
-        <span style="font-size:11px; color:#888;">(空格键暂停/继续)</span>
+    <!-- 日志面板 -->
+    <div id="logs-panel" style="display:none;">
+      <div class="logs-header">
+        <span>📋 日志</span>
+        <button id="logs-close">✕ 关闭</button>
+      </div>
+      <pre id="logs-content"></pre>
     </div>
 
-    <div style="margin-top: 12px;">
-      <button id="btn-new">➕ 新建脚本</button>
+    <!-- 工具 -->
+    <div class="tool-row">
       <button id="btn-import">📥 导入</button>
       <button id="btn-export">📤 导出</button>
-      <button id="btn-logs">📋 查看日志</button>
-      <button id="btn-clear-logs">🗑️ 清空日志</button>
+      <button id="btn-logs">📋 日志</button>
+      <button id="btn-clear-logs">🗑️ 清空</button>
     </div>
-    <div style="margin-top: 8px; font-size: 12px; color: #666;">
-      快捷键: Ctrl+B 启动默认 | Ctrl+Shift+X 停止
-    </div>
+    <div class="hint">快捷键: Ctrl+B 启动默认 | Ctrl+Shift+X 停止</div>
   </div>
   <script type="module" src="popup.js"></script>
 </body>
