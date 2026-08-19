@@ -1,0 +1,92 @@
+body {
+  width: 380px;
+  padding: 16px;
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+h2 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+#script-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px;
+}
+.script-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.script-item:last-child {
+  border-bottom: none;
+}
+.script-name {
+  font-weight: 500;
+  flex: 1;
+  cursor: pointer;
+}
+.script-name:hover {
+  color: #1a73e8;
+}
+.script-actions {
+  display: flex;
+  gap: 6px;
+}
+button {
+  padding: 4px 10px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+button:hover {
+  background: #f0f0f0;
+}
+button.primary {
+  background: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+button.primary:hover {
+  background: #1557b0;
+}
+button.danger {
+  border-color: #d32f2f;
+  color: #d32f2f;
+}
+button.danger:hover {
+  background: #ffebee;
+}
+#action-list .action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+#action-list .action-item:last-child {
+  border-bottom: none;
+}
+.action-info {
+  font-family: monospace;
+  font-size: 13px;
+}
+.action-del-btn {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+}
