@@ -22,7 +22,6 @@ export async function saveScript(script) {
   if (idx >= 0) {
     scripts[idx] = { ...scripts[idx], ...script };
   } else {
-    // 生成简单id（若没有提供）
     if (!script.id) {
       script.id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
     }
@@ -78,18 +77,30 @@ export async function exportScripts() {
 }
 
 /**
- * 导入脚本数据（覆盖已有，合并）
- * @param {string} jsonStr
+ * 导入脚本数据
+ * @param {string} jsonStr - JSON 字符串
+ * @param {string} strategy - 'rename' 或 'overwrite'，默认 'rename'
  */
-export async function importScripts(jsonStr) {
+export async function importScripts(jsonStr, strategy = 'rename') {
   const data = JSON.parse(jsonStr);
   if (!data.scripts || !Array.isArray(data.scripts)) {
     throw new Error('无效的脚本文件：缺少 scripts 数组');
   }
-  // 简单合并：以 id 为准，覆盖现有
   const existing = await getScripts();
-  const map = new Map(existing.map(s => [s.id, s]));
+  const existingIds = new Set(existing.map(s => s.id));
+  const newScripts = [];
   for (const s of data.scripts) {
+    if (existingIds.has(s.id) && strategy === 'rename') {
+      // 生成新 id 并修改名称
+      const newId = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+      s.id = newId;
+      s.name = s.name + ' (导入)';
+    }
+    newScripts.push(s);
+  }
+  // 合并（覆盖或新增）
+  const map = new Map(existing.map(s => [s.id, s]));
+  for (const s of newScripts) {
     map.set(s.id, s);
   }
   const merged = Array.from(map.values());

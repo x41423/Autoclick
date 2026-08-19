@@ -22,10 +22,19 @@
       </div>
     </div>
 
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <label style="font-size:13px; cursor:pointer;">
+        <input type="checkbox" id="continuous-mode"> 🔁 连续拾取模式
+        </label>
+        <span style="font-size:11px; color:#888;">(空格键暂停/继续)</span>
+    </div>
+
     <div style="margin-top: 12px;">
+      <button id="btn-new">➕ 新建脚本</button>
       <button id="btn-import">📥 导入</button>
       <button id="btn-export">📤 导出</button>
       <button id="btn-logs">📋 查看日志</button>
+      <button id="btn-clear-logs">🗑️ 清空日志</button>
     </div>
     <div style="margin-top: 8px; font-size: 12px; color: #666;">
       快捷键: Ctrl+B 启动默认 | Ctrl+Shift+X 停止

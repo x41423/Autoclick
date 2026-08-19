@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -44,8 +45,8 @@
   ],
   "web_accessible_resources": [
     {
-    "resources": ["content/picker.js", "content/player.js"],
-    "matches": ["<all_urls>"]
-  }
+      "resources": ["content/picker.js", "content/player.js"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }

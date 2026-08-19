@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拾取器测试页面</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      max-width: 800px;
+      width: 100%;
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 16px;
+    }
+    .test-section {
+      margin-bottom: 30px;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border-left: 4px solid #1a73e8;
+    }
+    .test-section h3 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #1a73e8;
+    }
+    .test-section label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 4px;
+      font-size: 14px;
+    }
+    select, input, button {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #fff;
+      cursor: pointer;
+    }
+    select {
+      width: 200px;
+    }
+    button {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #1557b0;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .custom-select {
+      position: relative;
+      display: inline-block;
+      width: 200px;
+    }
+    .custom-select-trigger {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .custom-select-trigger::after {
+      content: '▼';
+      font-size: 12px;
+      color: #888;
+    }
+    .custom-select-options {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin-top: 4px;
+      display: none;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .custom-select-options.active {
+      display: block;
+    }
+    .custom-select-options div {
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .custom-select-options div:hover {
+      background: #f0f4ff;
+    }
+    .custom-select-options div:not(:last-child) {
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    /* 二级菜单（悬停展开） */
+    .menu-group {
+      position: relative;
+      display: inline-block;
+    }
+    .menu-trigger {
+      padding: 8px 16px;
+      background: #e8eaed;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-block;
+    }
+    .menu-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 6px 0;
+      min-width: 120px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 200;
+    }
+    .menu-group:hover .menu-dropdown {
+      display: block;
+    }
+    .menu-dropdown div {
+      padding: 6px 16px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .menu-dropdown div:hover {
+      background: #f0f4ff;
+    }
+
+    /* 模态框 */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-box {
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+      position: relative;
+    }
+    .modal-box h3 {
+      margin-bottom: 12px;
+    }
+    .modal-box .close-btn {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #999;
+    }
+    .modal-box .close-btn:hover {
+      color: #333;
+    }
+    .modal-box button {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .status-box {
+      background: #e8f0fe;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 14px;
+      border-left: 4px solid #1a73e8;
+    }
+    .status-box code {
+      background: #fff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .badge {
+      display: inline-block;
+      background: #e8eaed;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #555;
+    }
+    hr {
+      margin: 20px 0;
+      border: none;
+      border-top: 1px solid #eee;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🧪 拾取器测试页面</h1>
+  <div class="subtitle">
+    用于测试 MouseClick Helper 插件的拾取器功能<br>
+    <span class="badge">悬停高亮</span>
+    <span class="badge">点击锁定</span>
+    <span class="badge">连续模式</span>
+    <span class="badge">空格暂停</span>
+  </div>
+
+  <!-- 1. 原生 Select -->
+  <div class="test-section">
+    <h3>1. 原生下拉选择框 (&lt;select&gt;)</h3>
+    <label for="native-select">选择场景：</label>
+    <select id="native-select">
+      <option value="day">☀️ 白天</option>
+      <option value="evening">🌆 傍晚</option>
+      <option value="night">🌙 夜晚</option>
+      <option value="parking">🅿️ 停车场</option>
+      <option value="urban">🏙️ 城区</option>
+      <option value="highway">🛣️ 高速</option>
+    </select>
+    <div style="margin-top:8px;font-size:13px;color:#888;">点击展开下拉菜单，拾取选项或整个下拉框</div>
+  </div>
+
+  <!-- 2. 自定义下拉（div模拟） -->
+  <div class="test-section">
+    <h3>2. 自定义下拉菜单 (div模拟)</h3>
+    <div class="custom-select" id="custom-select">
+      <div class="custom-select-trigger" id="custom-trigger">
+        <span id="custom-selected">请选择</span>
+      </div>
+      <div class="custom-select-options" id="custom-options">
+        <div data-value="day">☀️ 白天</div>
+        <div data-value="evening">🌆 傍晚</div>
+        <div data-value="night">🌙 夜晚</div>
+        <div data-value="parking">🅿️ 停车场</div>
+        <div data-value="urban">🏙️ 城区</div>
+        <div data-value="highway">🛣️ 高速</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:#888;">点击触发展开，选项可点击选择</div>
+  </div>
+
+  <!-- 3. 按钮与输入框 -->
+  <div class="test-section">
+    <h3>3. 按钮 &amp; 输入框</h3>
+    <div class="row">
+      <button id="test-btn">提交</button>
+      <button id="modal-btn" style="background:#34a853;">打开模态框</button>
+      <input type="text" placeholder="输入框" style="width:160px;">
+      <input type="checkbox" id="chk"> <label for="chk">复选框</label>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:#888;">点击按钮、输入框、复选框均可拾取</div>
+  </div>
+
+  <!-- 4. 二级菜单（悬停展开） -->
+  <div class="test-section">
+    <h3>4. 二级菜单 (悬停展开)</h3>
+    <div class="menu-group">
+      <span class="menu-trigger">📁 文件</span>
+      <div class="menu-dropdown">
+        <div>新建</div>
+        <div>打开</div>
+        <div>保存</div>
+        <div>另存为</div>
+      </div>
+    </div>
+    <div class="menu-group" style="margin-left:16px;">
+      <span class="menu-trigger">✏️ 编辑</span>
+      <div class="menu-dropdown">
+        <div>撤销</div>
+        <div>重做</div>
+        <div>剪切</div>
+        <div>复制</div>
+        <div>粘贴</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:#888;">鼠标悬停展开，可拾取菜单项</div>
+  </div>
+
+  <!-- 5. 模态框 -->
+  <div class="test-section">
+    <h3>5. 模态框 (点击按钮弹出)</h3>
+    <button id="modal-btn2" style="background:#ea4335;">显示模态框</button>
+    <div style="margin-top:8px;font-size:13px;color:#888;">拾取模态框内的元素（需先空格暂停展开模态框）</div>
+  </div>
+
+  <!-- 状态提示 -->
+  <div class="status-box">
+    <strong>📌 使用提示：</strong><br>
+    1. 在插件中编辑脚本，点击「添加点击」激活拾取器。<br>
+    2. 悬停任意元素，显示高亮边框。<br>
+    3. 点击锁定元素，可用方向键微调 (±1px)。<br>
+    4. <kbd>Enter</kbd> 确认拾取；<kbd>ESC</kbd> 取消或退出。<br>
+    5. 勾选「连续拾取模式」后，<kbd>Enter</kbd> 继续拾取下一个。<br>
+    6. 需要展开下拉/菜单/模态框时，按 <kbd>Space</kbd> 暂停，操作后再按 <kbd>Space</kbd> 继续。
+  </div>
+</div>
+
+<!-- 模态框 -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <button class="close-btn" id="modal-close">&times;</button>
+    <h3>模态框</h3>
+    <p>这是一个模态框，可以拾取里面的按钮和文字。</p>
+    <button id="modal-inner-btn" style="background:#1a73e8;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;">确定</button>
+    <button id="modal-cancel-btn" style="background:#ddd;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;margin-left:8px;">取消</button>
+  </div>
+</div>
+
+<script>
+  // ---- 自定义下拉菜单 ----
+  const trigger = document.getElementById('custom-trigger');
+  const options = document.getElementById('custom-options');
+  const selectedText = document.getElementById('custom-selected');
+
+  trigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    options.classList.toggle('active');
+  });
+
+  options.querySelectorAll('div').forEach(opt => {
+    opt.addEventListener('click', function(e) {
+      e.stopPropagation();
+      selectedText.textContent = this.textContent;
+      options.classList.remove('active');
+    });
+  });
+
+  document.addEventListener('click', function() {
+    options.classList.remove('active');
+  });
+
+  // ---- 模态框 ----
+  const overlay = document.getElementById('modal-overlay');
+  const openBtns = document.querySelectorAll('#modal-btn, #modal-btn2');
+  const closeBtn = document.getElementById('modal-close');
+
+  openBtns.forEach(btn => {
+    btn.addEventListener('click', function() {
+      overlay.classList.add('active');
+    });
+  });
+
+  closeBtn.addEventListener('click', function() {
+    overlay.classList.remove('active');
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) {
+      overlay.classList.remove('active');
+    }
+  });
+
+  // ---- 其他 ----
+  document.getElementById('test-btn').addEventListener('click', function() {
+    alert('按钮被点击！（这是为了触发页面交互，不影响拾取器）');
+  });
+
+  // 原生select的change事件（仅为演示）
+  document.getElementById('native-select').addEventListener('change', function() {
+    console.log('选择了：', this.value);
+  });
+
+  console.log('✅ 测试页面加载完成，可以使用插件拾取器进行测试。');
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 // popup/popup.js
 import { getScripts, deleteScript, setDefaultScriptId, getDefaultScriptId, saveScript, exportScripts, importScripts } from '../utils/storage.js';
-import { log, getLogs } from '../utils/logger.js';
+import { log, getLogs, clearLogs } from '../utils/logger.js';
 
 // DOM
 const scriptListEl = document.getElementById('script-list');
@@ -11,56 +11,158 @@ const addDelayBtn = document.getElementById('add-delay');
 const addClickBtn = document.getElementById('add-click');
 const saveEditorBtn = document.getElementById('save-editor');
 const cancelEditorBtn = document.getElementById('cancel-editor');
+const btnNew = document.getElementById('btn-new');
+const btnImport = document.getElementById('btn-import');
+const btnExport = document.getElementById('btn-export');
+const btnLogs = document.getElementById('btn-logs');
+const btnClearLogs = document.getElementById('btn-clear-logs');
 
-let currentEditingId = null;       // 正在编辑的脚本ID
-let editingActions = [];          // 临时动作列表（用于编辑）
+let currentEditingId = null;
+let editingActions = [];
+let dragIndex = null;
 
-// 示例脚本（保持不变）
-const DEMO_SCRIPT = {
-  id: 'demo',
-  name: '示例脚本 - 百度搜索点击',
-  actions: [
-    { type: 'delay', value: 1000 },
-    { 
-      type: 'click',
-      target: {
-        documentX: 500,
-        documentY: 300,
-        snapshotScrollX: 0,
-        snapshotScrollY: 0,
-        elementRect: null,
-        clickOffsetX: 0,
-        clickOffsetY: 0,
-      }
-    }
-  ]
-};
-
-// ---------- 初始化 ----------
-async function init() {
-  const scripts = await getScripts();
-  if (scripts.length === 0) {
-    await saveScript(DEMO_SCRIPT);
-    await setDefaultScriptId(DEMO_SCRIPT.id);
-    log('INFO', '[POPUP]', '已创建示例脚本');
-  }
-  renderScriptList();
-  // 监听来自 background 的 picker 确认消息
-  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type === 'pickerConfirm') {
-      // 收到拾取数据，添加点击动作
-      const action = {
-        type: 'click',
-        target: msg.payload
-      };
-      editingActions.push(action);
-      renderActions();
-      sendResponse({ success: true });
-    } else if (msg.type === 'pickerCancel') {
-      // 用户取消拾取，无操作
-      sendResponse({ success: true });
-    }
+// ---------- Toast ----------
+function showToast(text) {
+  const existing = document.querySelector('.mch-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'mch-toast';
+  toast.textContent = text;
+  Object.assign(toast.style, {
+    position: 'fixed',
+    bottom: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(0,0,0,0.8)',
+    color: '#fff',
+    padding: '8px 20px',
+    borderRadius: '6px',
+    fontSize: '14px',
+    zIndex: '999999',
+    boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+    transition: 'opacity 0.3s',
+    opacity: '1'
   });
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
+}
+
+// ---------- 拖拽处理函数 ----------
+function handleDragStart(e) {
+  dragIndex = parseInt(this.dataset.index);
+  this.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  this.style.border = '2px dashed #1a73e8';
+}
+
+function handleDragLeave(e) {
+  this.style.border = '';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  this.style.border = '';
+  const dropIndex = parseInt(this.dataset.index);
+  if (dragIndex !== null && dragIndex !== dropIndex) {
+    const [removed] = editingActions.splice(dragIndex, 1);
+    editingActions.splice(dropIndex, 0, removed);
+    renderActions();
+    saveCurrentScript();
+  }
+  dragIndex = null;
+}
+
+// ---------- 保存与重载 ----------
+async function saveCurrentScript() {
+  if (!currentEditingId) return;
+  const scripts = await getScripts();
+  const script = scripts.find(s => s.id === currentEditingId);
+  if (script) {
+    script.actions = editingActions;
+    await saveScript(script);
+  }
+}
+
+async function reloadEditingActions(scriptId) {
+  const scripts = await getScripts();
+  const script = scripts.find(s => s.id === scriptId);
+  if (script) {
+    editingActions = JSON.parse(JSON.stringify(script.actions || []));
+    renderActions();
+  }
+}
+
+// ---------- 渲染动作列表 ----------
+function renderActions() {
+  if (!actionListEl) return;
+  if (editingActions.length === 0) {
+    actionListEl.innerHTML = '<div style="color:#999;padding:8px;text-align:center;">暂无动作，请添加</div>';
+    return;
+  }
+  let html = '';
+  editingActions.forEach((action, index) => {
+    let desc = '';
+    if (action.type === 'delay') {
+      desc = `⏱️ 延迟 ${action.value}ms`;
+    } else if (action.type === 'click') {
+      const t = action.target;
+      desc = `🖱️ 点击 (${t.documentX}, ${t.documentY})`;
+    } else {
+      desc = `❓ ${action.type}`;
+    }
+    html += `
+      <div class="action-item" draggable="true" data-index="${index}">
+        <span class="action-info">${index+1}. ${desc}</span>
+        <button class="action-del-btn" data-index="${index}">✕</button>
+      </div>
+    `;
+  });
+  actionListEl.innerHTML = html;
+
+  // 拖拽事件
+  const items = actionListEl.querySelectorAll('.action-item');
+  items.forEach(item => {
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('dragleave', handleDragLeave);
+    item.addEventListener('drop', handleDrop);
+  });
+
+  // 删除按钮
+  actionListEl.querySelectorAll('.action-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = parseInt(btn.dataset.index);
+      editingActions.splice(idx, 1);
+      renderActions();
+      await saveCurrentScript();
+    });
+  });
+}
+
+// ---------- 编辑器 ----------
+async function openEditor(scriptId) {
+  const scripts = await getScripts();
+  const script = scripts.find(s => s.id === scriptId);
+  if (!script) return;
+  currentEditingId = scriptId;
+  editingActions = JSON.parse(JSON.stringify(script.actions || []));
+  editNameEl.textContent = `编辑: ${script.name}`;
+  renderActions();
+  editorDiv.style.display = 'block';
+}
+
+function closeEditor() {
+  currentEditingId = null;
+  editingActions = [];
+  editorDiv.style.display = 'none';
 }
 
 // ---------- 渲染脚本列表 ----------
@@ -87,50 +189,64 @@ async function renderScriptList() {
     `;
   }
   scriptListEl.innerHTML = html;
+}
 
-  // 绑定事件
-  scriptListEl.querySelectorAll('.run-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      const scripts = await getScripts();
-      const script = scripts.find(s => s.id === id);
-      if (script) {
-        chrome.runtime.sendMessage({ type: 'runScript', payload: { scriptId: id, scriptData: script } }, (response) => {
-          if (chrome.runtime.lastError) alert('执行失败: ' + chrome.runtime.lastError.message);
-          else if (response && !response.success) alert('执行失败: ' + response.error);
-          else window.close();
-        });
+// ---------- 事件委托绑定（一次性） ----------
+function bindScriptListEvents() {
+  scriptListEl.addEventListener('click', async (e) => {
+    const target = e.target.closest('button');
+    if (target) {
+      const id = target.dataset.id;
+      if (!id) return;
+
+      if (target.classList.contains('run-btn')) {
+        const scripts = await getScripts();
+        const script = scripts.find(s => s.id === id);
+        if (!script) { alert('脚本不存在'); return; }
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: 'runScript',
+            payload: { scriptId: id, scriptData: script }
+          });
+          if (response && !response.success) {
+            alert('执行失败: ' + response.error);
+          } else {
+            window.close();
+          }
+        } catch (err) {
+          if (!err.message?.includes('port closed') && !err.message?.includes('Receiving end')) {
+            alert('执行失败: ' + err.message);
+          }
+        }
+        return;
       }
-    });
-  });
 
-  scriptListEl.querySelectorAll('.edit-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      await openEditor(id);
-    });
-  });
+      if (target.classList.contains('edit-btn')) {
+        await openEditor(id);
+        return;
+      }
 
-  scriptListEl.querySelectorAll('.default-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      await setDefaultScriptId(btn.dataset.id);
-      renderScriptList();
-    });
-  });
-
-  scriptListEl.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      if (confirm('确定删除此脚本吗？')) {
-        await deleteScript(btn.dataset.id);
+      if (target.classList.contains('default-btn')) {
+        await setDefaultScriptId(id);
         renderScriptList();
-        if (currentEditingId === btn.dataset.id) closeEditor();
+        return;
       }
-    });
-  });
 
-  scriptListEl.querySelectorAll('.script-name').forEach(el => {
-    el.addEventListener('click', async () => {
-      const id = el.dataset.id;
+      if (target.classList.contains('delete-btn')) {
+        if (confirm('确定删除此脚本吗？')) {
+          await deleteScript(id);
+          renderScriptList();
+          if (currentEditingId === id) closeEditor();
+        }
+        return;
+      }
+      return;
+    }
+
+    // 点击脚本名称（重命名）
+    const nameEl = e.target.closest('.script-name');
+    if (nameEl) {
+      const id = nameEl.dataset.id;
       const scripts = await getScripts();
       const script = scripts.find(s => s.id === id);
       if (!script) return;
@@ -140,69 +256,32 @@ async function renderScriptList() {
         await saveScript(script);
         renderScriptList();
         if (currentEditingId === id) {
-          editNameEl.textContent = script.name;
+          editNameEl.textContent = `编辑: ${script.name}`;
         }
       }
-    });
-  });
-}
-
-// ---------- 编辑器 ----------
-async function openEditor(scriptId) {
-  const scripts = await getScripts();
-  const script = scripts.find(s => s.id === scriptId);
-  if (!script) return;
-
-  currentEditingId = scriptId;
-  editingActions = JSON.parse(JSON.stringify(script.actions || []));
-  editNameEl.textContent = `编辑: ${script.name}`;
-  renderActions();
-  editorDiv.style.display = 'block';
-}
-
-function closeEditor() {
-  currentEditingId = null;
-  editingActions = [];
-  editorDiv.style.display = 'none';
-}
-
-function renderActions() {
-  if (!actionListEl) return;
-  if (editingActions.length === 0) {
-    actionListEl.innerHTML = '<div style="color:#999;padding:8px;text-align:center;">暂无动作，请添加</div>';
-    return;
-  }
-  let html = '';
-  editingActions.forEach((action, index) => {
-    let desc = '';
-    if (action.type === 'delay') {
-      desc = `⏱️ 延迟 ${action.value}ms`;
-    } else if (action.type === 'click') {
-      const t = action.target;
-      desc = `🖱️ 点击 (${t.documentX}, ${t.documentY})`;
-    } else {
-      desc = `❓ ${action.type}`;
     }
-    html += `
-      <div class="action-item">
-        <span class="action-info">${index+1}. ${desc}</span>
-        <button class="action-del-btn" data-index="${index}">✕</button>
-      </div>
-    `;
-  });
-  actionListEl.innerHTML = html;
-  // 删除事件
-  actionListEl.querySelectorAll('.action-del-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.index);
-      editingActions.splice(idx, 1);
-      renderActions();
-    });
   });
 }
 
-// 添加延迟
-addDelayBtn.addEventListener('click', () => {
+// ---------- 初始化 ----------
+async function init() {
+  renderScriptList();
+  // 绑定脚本列表事件委托（只一次）
+  bindScriptListEvents();
+
+  // 监听来自 background 的消息
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'actionSaved') {
+      if (currentEditingId === msg.payload.scriptId) {
+        reloadEditingActions(msg.payload.scriptId);
+      }
+      showToast('✅ 点击动作已添加');
+    }
+  });
+}
+
+// ---------- 事件绑定 ----------
+addDelayBtn.addEventListener('click', async () => {
   const ms = prompt('请输入延迟毫秒数:', '1000');
   if (ms === null) return;
   const val = parseInt(ms);
@@ -212,32 +291,53 @@ addDelayBtn.addEventListener('click', () => {
   }
   editingActions.push({ type: 'delay', value: val });
   renderActions();
+  await saveCurrentScript();
 });
 
-// 添加点击（触发拾取器）
 addClickBtn.addEventListener('click', async () => {
-  // 获取当前活动标签页
+  if (!currentEditingId) {
+    alert('请先创建或打开一个脚本进行编辑');
+    return;
+  }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) {
     alert('未找到活动标签页，请打开一个网页');
     return;
   }
-  // 注入 picker.js
+
+  const continuousModeCheckbox = document.getElementById('continuous-mode');
+  const continuous = continuousModeCheckbox ? continuousModeCheckbox.checked : false;
+
+  // 通知 background 准备拾取，同时传递连续模式标志
+  await chrome.runtime.sendMessage({
+    type: 'preparePicker',
+    payload: { 
+      scriptId: currentEditingId,
+      continuous: continuous   // 新增
+    }
+  });
+
+  // 每次强制注入 picker.js
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ['content/picker.js'],
     });
-  } catch (e) {
-    // 可能已注入，忽略
+  } catch (err) {
+    alert('拾取器注入失败，请刷新页面后重试');
+    return;
   }
-  // 发送启动消息
-  await chrome.tabs.sendMessage(tab.id, { type: 'startPicker' });
-  // 注意：拾取器完成后会通过 runtime.onMessage 发送 pickerConfirm，我们在 init 中已监听
-  // 这里可以关闭 popup 吗？不建议，因为用户需要看到结果，但拾取器会在页面操作，popup保持开启即可
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: 'startPicker',
+      payload: { continuous }
+    });
+  } catch (err) {
+    alert('启动拾取器失败，请刷新页面后重试');
+  }
 });
 
-// 保存编辑
 saveEditorBtn.addEventListener('click', async () => {
   if (!currentEditingId) return;
   const scripts = await getScripts();
@@ -250,11 +350,25 @@ saveEditorBtn.addEventListener('click', async () => {
   log('INFO', '[POPUP]', `脚本 "${script.name}" 已保存`);
 });
 
-// 取消编辑
 cancelEditorBtn.addEventListener('click', closeEditor);
 
-// ---------- 导入导出日志 ----------
-document.getElementById('btn-import').addEventListener('click', () => {
+if (btnNew) {
+  btnNew.addEventListener('click', async () => {
+    const name = prompt('请输入新脚本名称:', '未命名脚本');
+    if (name === null) return;
+    const newScript = {
+      id: Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+      name: name.trim() || '未命名',
+      actions: []
+    };
+    await saveScript(newScript);
+    await renderScriptList();
+    await openEditor(newScript.id);
+  });
+}
+
+// 导入导出日志
+btnImport.addEventListener('click', () => {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.mcsx,application/json';
@@ -277,7 +391,7 @@ document.getElementById('btn-import').addEventListener('click', () => {
   input.click();
 });
 
-document.getElementById('btn-export').addEventListener('click', async () => {
+btnExport.addEventListener('click', async () => {
   try {
     const json = await exportScripts();
     const blob = new Blob([json], { type: 'application/json' });
@@ -292,7 +406,7 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('btn-logs').addEventListener('click', async () => {
+btnLogs.addEventListener('click', async () => {
   const logs = await getLogs();
   if (logs.length === 0) {
     alert('暂无日志');
@@ -302,6 +416,16 @@ document.getElementById('btn-logs').addEventListener('click', async () => {
   const win = window.open('', '_blank', 'width=600,height=400');
   win.document.write(`<pre style="margin:0;padding:12px;font-size:12px;background:#f5f5f5;height:100%;overflow:auto;">${text}</pre>`);
 });
+
+// 清空日志
+if (btnClearLogs) {
+  btnClearLogs.addEventListener('click', async () => {
+    if (confirm('确定清空所有日志吗？')) {
+      await clearLogs();
+      alert('日志已清空');
+    }
+  });
+}
 
 // 启动
 init().catch(err => console.error('初始化失败:', err));
