@@ -130,6 +130,10 @@ function renderActions() {
     } else if (action.type === 'click') {
       const t = action.target;
       desc = `🖱️ 点击 (${escapeHtml(t.documentX)}, ${escapeHtml(t.documentY)})`;
+    } else if (action.type === 'monitor') {
+      const r = action.region || {};
+      const mode = action.thresholds?.mode === 'percent' ? `±${escapeHtml(action.thresholds.percentUp)}%/${escapeHtml(action.thresholds.percentDown)}%` : `上${escapeHtml(action.thresholds?.upper)}/下${escapeHtml(action.thresholds?.lower)}`;
+      desc = `📡 ${escapeHtml(action.name || '监控')} (${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.w)}×${Math.round(r.h)}) ${mode} 每${escapeHtml(action.intervalSec)}s`;
     } else {
       desc = `❓ ${escapeHtml(action.type)}`;
     }
@@ -449,6 +453,43 @@ addClickBtn.addEventListener('click', async () => {
   }
 });
 
+const addMonitorBtn = document.getElementById('add-monitor');
+
+addMonitorBtn.addEventListener('click', async () => {
+  if (!currentEditingId) {
+    showToast('请先创建或打开一个脚本进行编辑');
+    return;
+  }
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) {
+    showToast('未找到活动标签页，请打开一个网页');
+    return;
+  }
+
+  await chrome.runtime.sendMessage({
+    type: 'preparePicker',
+    payload: { scriptId: currentEditingId, continuous: false }
+  });
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ['content/picker.js'],
+    });
+  } catch (err) {
+    showToast('拾取器注入失败，请刷新页面后重试');
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: 'startPickRegion'
+    });
+  } catch (err) {
+    showToast('启动区域拾取失败，请刷新页面后重试');
+  }
+});
+
 saveEditorBtn.addEventListener('click', async () => {
   if (!currentEditingId) return;
   const scripts = await getScripts();
@@ -536,7 +577,7 @@ async function init() {
       if (currentEditingId === msg.payload.scriptId) {
         reloadEditingActions(msg.payload.scriptId);
       }
-      showToast('✅ 点击动作已添加');
+      showToast('✅ 动作已添加');
     }
   });
 }
