@@ -6,5 +6,11 @@
   "description": "Chrome 扩展：自动化点击助手（含 Node 测试环境）",
   "scripts": {
     "test": "node --test \"tests/*.test.js\""
+  },
+  "dependencies": {
+    "@paddle-js-models/ocr": "^4.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }
