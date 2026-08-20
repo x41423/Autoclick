@@ -540,6 +540,239 @@
     }, 2000);
   }
 
+  // ---------- 区域监控拖选 ----------
+  let regionMode = false;
+  let dragStart = null;
+  let dragRectDiv = null;
+  let regionPanelDiv = null;
+  let lastRegion = null;
+
+  function createDragRect() {
+    if (dragRectDiv) return;
+    dragRectDiv = document.createElement('div');
+    dragRectDiv.id = 'mch-picker-region-rect';
+    dragRectDiv.style.cssText = `
+      position: fixed;
+      border: 2px dashed #ff9800;
+      background: rgba(255, 152, 0, 0.15);
+      pointer-events: none;
+      z-index: 1000001;
+      display: none;
+    `;
+    document.body.appendChild(dragRectDiv);
+  }
+
+  function updateDragRect() {
+    if (!dragStart || !dragRectDiv) return;
+    const x = Math.min(dragStart.x, lastRegion.x);
+    const y = Math.min(dragStart.y, lastRegion.y);
+    dragRectDiv.style.left = x + 'px';
+    dragRectDiv.style.top = y + 'px';
+    dragRectDiv.style.width = Math.abs(lastRegion.w) + 'px';
+    dragRectDiv.style.height = Math.abs(lastRegion.h) + 'px';
+    dragRectDiv.style.display = 'block';
+  }
+
+  function onRegionPointerDown(e) {
+    if (!regionMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragStart = { x: e.clientX, y: e.clientY };
+    lastRegion = { x: e.clientX, y: e.clientY, w: 0, h: 0 };
+    updateDragRect();
+    document.addEventListener('pointermove', onRegionPointerMove, true);
+    document.addEventListener('pointerup', onRegionPointerUp, true);
+  }
+
+  function onRegionPointerMove(e) {
+    if (!regionMode || !dragStart) return;
+    e.preventDefault();
+    e.stopPropagation();
+    lastRegion = {
+      x: Math.min(dragStart.x, e.clientX),
+      y: Math.min(dragStart.y, e.clientY),
+      w: Math.abs(e.clientX - dragStart.x),
+      h: Math.abs(e.clientY - dragStart.y)
+    };
+    updateDragRect();
+  }
+
+  function onRegionPointerUp(e) {
+    if (!regionMode || !dragStart) return;
+    e.preventDefault();
+    e.stopPropagation();
+    document.removeEventListener('pointermove', onRegionPointerMove, true);
+    document.removeEventListener('pointerup', onRegionPointerUp, true);
+    if (lastRegion && lastRegion.w >= 10 && lastRegion.h >= 10) {
+      dragStart = null;
+      if (dragRectDiv) dragRectDiv.style.borderStyle = 'solid';
+      showRegionPanel();
+    } else {
+      dragStart = null;
+      if (dragRectDiv) dragRectDiv.style.display = 'none';
+      showPageToast('区域太小，请重新拖选（至少 10×10）');
+    }
+  }
+
+  function createRegionPanel() {
+    if (regionPanelDiv) return;
+    regionPanelDiv = document.createElement('div');
+    regionPanelDiv.id = 'mch-region-panel';
+    regionPanelDiv.style.cssText = `
+      position: fixed;
+      top: 20px; right: 20px;
+      width: 260px;
+      z-index: 1000002;
+      background: rgba(255,255,255,0.97);
+      color: #222;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      padding: 14px;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      user-select: none;
+      display: none;
+    `;
+    regionPanelDiv.innerHTML = `
+      <div style="font-weight:600;margin-bottom:10px;">区域监控配置</div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;margin-bottom:2px;">名称</label>
+        <input id="mch-rp-name" value="监控区域" style="width:100%;box-sizing:border-box;padding:4px 6px;"/>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;margin-bottom:2px;">间隔（秒）</label>
+        <input id="mch-rp-interval" type="number" min="0.5" step="0.5" value="1" style="width:100%;box-sizing:border-box;padding:4px 6px;"/>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;margin-bottom:2px;">阈值模式</label>
+        <select id="mch-rp-mode" style="width:100%;padding:4px 6px;">
+          <option value="exact">精确值（上/下限）</option>
+          <option value="percent">百分比（相对基准）</option>
+        </select>
+      </div>
+      <div id="mch-rp-exact" style="margin-bottom:8px;">
+        <div style="display:flex;gap:6px;">
+          <div style="flex:1;"><label style="display:block;margin-bottom:2px;">上限</label><input id="mch-rp-upper" type="number" value="150" style="width:100%;box-sizing:border-box;padding:4px 6px;"/></div>
+          <div style="flex:1;"><label style="display:block;margin-bottom:2px;">下限</label><input id="mch-rp-lower" type="number" value="50" style="width:100%;box-sizing:border-box;padding:4px 6px;"/></div>
+        </div>
+      </div>
+      <div id="mch-rp-percent" style="margin-bottom:8px;display:none;">
+        <div style="display:flex;gap:6px;">
+          <div style="flex:1;"><label style="display:block;margin-bottom:2px;">基准</label><input id="mch-rp-target" type="number" value="100" style="width:100%;box-sizing:border-box;padding:4px 6px;"/></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <div style="flex:1;"><label style="display:block;margin-bottom:2px;">高于 %</label><input id="mch-rp-up" type="number" value="110" style="width:100%;box-sizing:border-box;padding:4px 6px;"/></div>
+          <div style="flex:1;"><label style="display:block;margin-bottom:2px;">低于 %</label><input id="mch-rp-down" type="number" value="90" style="width:100%;box-sizing:border-box;padding:4px 6px;"/></div>
+        </div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;margin-bottom:2px;">提醒方式</label>
+        <select id="mch-rp-way" style="width:100%;padding:4px 6px;">
+          <option value="both">通知 + 声音</option>
+          <option value="notification">仅通知</option>
+          <option value="sound">仅声音</option>
+        </select>
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="display:block;margin-bottom:2px;">冷却（秒）</label>
+        <input id="mch-rp-cooldown" type="number" min="0" value="60" style="width:100%;box-sizing:border-box;padding:4px 6px;"/>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;margin-bottom:2px;">解析方式</label>
+        <select id="mch-rp-parse" style="width:100%;padding:4px 6px;">
+          <option value="number">数字（比较阈值）</option>
+          <option value="text">文本（仅记录）</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;justify-content:flex-end;">
+        <button id="mch-rp-redo" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">重新选择</button>
+        <button id="mch-rp-cancel" style="padding:5px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">取消</button>
+        <button id="mch-rp-ok" style="padding:5px 12px;border:none;border-radius:6px;background:#1a73e8;color:#fff;cursor:pointer;">添加监控</button>
+      </div>
+    `;
+    regionPanelDiv.querySelector('#mch-rp-mode').addEventListener('change', () => {
+      const percent = regionPanelDiv.querySelector('#mch-rp-mode').value === 'percent';
+      regionPanelDiv.querySelector('#mch-rp-exact').style.display = percent ? 'none' : '';
+      regionPanelDiv.querySelector('#mch-rp-percent').style.display = percent ? '' : 'none';
+    });
+    regionPanelDiv.querySelector('#mch-rp-redo').addEventListener('click', () => {
+      regionPanelDiv.style.display = 'none';
+      dragStart = null;
+      if (dragRectDiv) {
+        dragRectDiv.style.display = 'none';
+        dragRectDiv.style.borderStyle = 'dashed';
+      }
+      lastRegion = null;
+      showPageToast('请重新拖选监控区域');
+    });
+    regionPanelDiv.querySelector('#mch-rp-cancel').addEventListener('click', () => {
+      regionPanelDiv.style.display = 'none';
+      exitRegionMode();
+    });
+    regionPanelDiv.querySelector('#mch-rp-ok').addEventListener('click', () => {
+      const q = (id) => regionPanelDiv.querySelector(id);
+      const mode = q('#mch-rp-mode').value;
+      const thresholds = mode === 'percent'
+        ? { mode: 'percent', target: Number(q('#mch-rp-target').value), percentUp: Number(q('#mch-rp-up').value), percentDown: Number(q('#mch-rp-down').value) }
+        : { mode: 'exact', upper: Number(q('#mch-rp-upper').value), lower: Number(q('#mch-rp-lower').value) };
+      const config = {
+        name: q('#mch-rp-name').value || '监控区域',
+        intervalSec: Math.max(0.5, Number(q('#mch-rp-interval').value) || 1),
+        thresholds,
+        alert: { way: q('#mch-rp-way').value, cooldownSec: Math.max(0, Number(q('#mch-rp-cooldown').value) || 0) },
+        parse: q('#mch-rp-parse').value
+      };
+      chrome.runtime.sendMessage({
+        type: 'pickerRegionConfirm',
+        payload: { region: lastRegion, scale: window.devicePixelRatio || 1, config }
+      });
+      showPageToast(`✅ 已添加监控 "${config.name}"`);
+      exitRegionMode();
+    });
+    document.body.appendChild(regionPanelDiv);
+  }
+
+  function showRegionPanel() {
+    createRegionPanel();
+    regionPanelDiv.style.display = 'block';
+  }
+
+  function exitRegionMode() {
+    regionMode = false;
+    dragStart = null;
+    lastRegion = null;
+    if (dragRectDiv) { dragRectDiv.remove(); dragRectDiv = null; }
+    if (regionPanelDiv) { regionPanelDiv.remove(); regionPanelDiv = null; }
+    document.removeEventListener('pointerdown', onRegionPointerDown, true);
+    document.removeEventListener('keydown', onRegionKeyDown, true);
+    deactivate();
+  }
+
+  function onRegionKeyDown(e) {
+    if (!regionMode) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      exitRegionMode();
+      chrome.runtime.sendMessage({ type: 'pickerCancel' });
+    }
+  }
+
+  function activateRegionMode() {
+    if (isActive) deactivate();
+    regionMode = true;
+    isActive = true;
+    createOverlay();
+    createDragRect();
+    showPageToast('按住鼠标左键拖选监控区域，松开后配置阈值');
+    document.addEventListener('pointerdown', onRegionPointerDown, true);
+    document.addEventListener('keydown', onRegionKeyDown, true);
+    chrome.runtime.sendMessage({
+      type: 'log',
+      payload: { level: 'INFO', tag: '[Picker]', message: '区域拖选已激活' }
+    });
+  }
+
   // ---------- 消息监听 ----------
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'showToast') {
@@ -555,6 +788,11 @@
     }
     if (msg.type === 'stopPicker') {
       deactivate();
+      sendResponse({ success: true });
+      return false;
+    }
+    if (msg.type === 'startPickRegion') {
+      activateRegionMode();
       sendResponse({ success: true });
       return false;
     }

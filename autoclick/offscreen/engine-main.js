@@ -77,14 +77,21 @@ function playAlertSound() {
 
 function makeMonitorManager() {
   return createMonitorManager({
-    captureVisibleTab: async () => {
+    captureVisibleTab: async (region) => {
       const res = await callSW({ type: 'captureVisibleTab' }, 20000);
       if (!res || !res.success || !res.dataUrl) {
         const e = new Error(res?.error || '截屏失败');
         e.code = 'CAPTURE';
         throw e;
       }
-      return res.dataUrl;
+      if (!region) return res.dataUrl;
+      const scale = region.scale || 1;
+      const img = await loadImage(res.dataUrl);
+      const c = document.createElement('canvas');
+      c.width = Math.round(region.w * scale);
+      c.height = Math.round(region.h * scale);
+      c.getContext('2d').drawImage(img, -region.x * scale, -region.y * scale);
+      return c.toDataURL('image/jpeg', 0.9);
     },
     loadImage,
     ocrReady: () => initOcrOnce(),

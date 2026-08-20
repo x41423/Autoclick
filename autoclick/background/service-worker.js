@@ -5,9 +5,40 @@ import { relayClickWithRetry } from '../utils/click-relay.js';
 
 const EXEC_STATE_KEY = 'executionState';
 const PENDING_PICKER_KEY = 'pendingPicker';
+const MONITOR_STATE_KEY = 'monitorStates';
+
+const ICON_URL = chrome.runtime.getURL('assets/icon-128.png');
 
 let enginePort = null;
 let lastProgressAt = 0;
+
+async function getMonitorStates() {
+  const result = await chrome.storage.local.get(MONITOR_STATE_KEY);
+  return result[MONITOR_STATE_KEY] || [];
+}
+
+async function upsertMonitorState(status) {
+  const states = await getMonitorStates();
+  const idx = states.findIndex(s => s.id === status.id);
+  if (idx >= 0) states[idx] = status; else states.push(status);
+  await chrome.storage.local.set({ [MONITOR_STATE_KEY]: states });
+  return states;
+}
+
+function notifyMonitor(kind, payload) {
+  const title = kind === 'recover' ? '监控已恢复' : (kind === 'error' ? '监控异常' : '监控提醒');
+  const tag = `monitor-${payload.id || 'x'}`;
+  if (kind === 'recover') {
+    chrome.notifications.clear(tag).catch(() => {});
+  }
+  chrome.notifications.create(tag, {
+    type: 'basic',
+    iconUrl: ICON_URL,
+    title,
+    message: payload.message || '',
+    priority: 2
+  }).catch(() => {});
+}
 
 // ---------- 状态管理 ----------
 async function saveExecutionState(state) {
@@ -167,12 +198,45 @@ async function handleEngineCall(payload, port) {
       return { success: true };
     }
 
+    case 'captureVisibleTab': {
+      if (!state) return { success: false, error: '无执行状态' };
+      try {
+        const dataUrl = await chrome.tabs.captureVisibleTab(state.tabId, { format: 'jpeg', quality: 60 });
+        return { success: true, dataUrl };
+      } catch (e) {
+        return { success: false, error: `截屏失败: ${e.message}` };
+      }
+    }
+
+    case 'monitorAlert': {
+      const way = payload.way;
+      if (way === 'notification' || way === 'both') {
+        notifyMonitor(payload.kind, payload.payload);
+      }
+      if (state && state.tabId) {
+        chrome.tabs.sendMessage(state.tabId, {
+          type: 'monitorAlert',
+          payload: { kind: payload.kind, ...payload.payload }
+        }).catch(() => {});
+      }
+      return { success: true };
+    }
+
+    case 'monitorStatus': {
+      const states = await upsertMonitorState(payload.status);
+      if (state && state.tabId) {
+        chrome.tabs.sendMessage(state.tabId, { type: 'monitorStatus', payload: { status: payload.status, all: states } }).catch(() => {});
+      }
+      return { success: true };
+    }
+
     case 'engineDone': {
       if (enginePort === port) {
         enginePort = null;
         if (state && state.tabId) {
           chrome.tabs.sendMessage(state.tabId, { type: 'barHide' }).catch(() => {});
         }
+        await chrome.storage.local.remove(MONITOR_STATE_KEY);
         await clearExecutionState();
         await chrome.offscreen.closeDocument().catch(() => {});
       }
@@ -206,6 +270,7 @@ async function stopEngine() {
   if (state && state.tabId) {
     chrome.tabs.sendMessage(state.tabId, { type: 'barHide' }).catch(() => {});
   }
+  await chrome.storage.local.remove(MONITOR_STATE_KEY).catch(() => {});
   if (enginePort) {
     try { enginePort.postMessage({ type: 'engineStop' }); } catch (e) {}
     try { enginePort.disconnect(); } catch (e) {}
@@ -269,6 +334,54 @@ async function handleMessage(message, sender) {
   if (type === 'pickerCancel') {
     await clearPendingPicker();
     log('DEBUG', '[BG]', '拾取已取消');
+    return { success: true };
+  }
+
+  if (type === 'pickerRegionConfirm') {
+    const pending = await getPendingPicker();
+    if (pending && pending.scriptId) {
+      try {
+        const scripts = await getScripts();
+        const script = scripts.find(s => s.id === pending.scriptId);
+        if (script) {
+          if (!script.actions) script.actions = [];
+          script.actions.push({
+            type: 'monitor',
+            name: payload.config.name || '监控区域',
+            region: payload.region,
+            scale: payload.scale || 1,
+            intervalSec: payload.config.intervalSec,
+            thresholds: payload.config.thresholds,
+            alert: payload.config.alert,
+            parse: payload.config.parse
+          });
+          await saveScript(script);
+          log('INFO', '[BG]', `已添加监控动作到脚本 "${script.name}"（当前共 ${script.actions.length} 个动作）`);
+          chrome.runtime.sendMessage({
+            type: 'actionSaved',
+            payload: { scriptId: script.id }
+          }).catch(() => {});
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+              await chrome.tabs.sendMessage(tab.id, {
+                type: 'showToast',
+                payload: { message: `✅ 已添加监控 (${script.actions.length})` }
+              });
+            }
+          } catch (_) {}
+          await clearPendingPicker();
+        } else {
+          log('WARN', '[BG]', '未找到对应的脚本');
+          await clearPendingPicker();
+        }
+      } catch (err) {
+        log('ERROR', '[BG]', `保存监控动作失败: ${err.message}`);
+        await clearPendingPicker();
+      }
+    } else {
+      log('WARN', '[BG]', '收到区域拾取数据但没有待处理的脚本ID');
+    }
     return { success: true };
   }
 

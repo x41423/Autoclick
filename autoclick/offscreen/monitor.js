@@ -31,7 +31,7 @@ export function createMonitorManager(deps) {
     const started = deps.now();
     let doWait = true;
     try {
-      const dataUrl = await deps.captureVisibleTab();
+      const dataUrl = await deps.captureVisibleTab(action.region);
       const img = await deps.loadImage(dataUrl);
       await deps.ocrReady();
       const lines = await deps.ocrRecognize(img);
