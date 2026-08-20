@@ -70,12 +70,16 @@ export async function runEngine(state, deps) {
       if (!result || !result.success) {
         throw new Error((result && result.error) || `点击失败 (第 ${i + 1} 步)`);
       }
+    } else if (action.type === 'monitor') {
+      await deps.startMonitor(i, action);
     } else {
       await deps.log('WARN', `未知动作类型: ${action.type}，跳过`);
     }
 
     if (deps.isAborted()) { interrupted = true; break; }
   }
+
+  if (interrupted) await deps.stopMonitors?.();
 
   return { completed: !interrupted };
 }
