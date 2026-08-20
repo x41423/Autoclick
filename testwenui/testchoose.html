@@ -335,6 +335,21 @@
     <div style="margin-top:8px;font-size:13px;color:#888;">拾取模态框内的元素（需先空格暂停展开模态框）</div>
   </div>
 
+  <!-- 6. OCR 监控测试区 -->
+  <div class="test-section" id="monitor-test-section">
+    <h3>6. OCR 监控测试区 (区域监控)</h3>
+    <div style="background:#fffbe6;border:2px dashed #ff9800;border-radius:10px;padding:20px;text-align:center;">
+      <div style="font-size:13px;color:#888;margin-bottom:8px;">用「📡 添加监控」拖选此区域，测试数字识别与越界提醒</div>
+      <div id="monitor-value" style="font-size:52px;font-weight:700;color:#1a73e8;font-variant-numeric:tabular-nums;">当前余额: 100</div>
+      <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
+        <button id="monitor-dec" style="padding:8px 18px;font-size:16px;">−10</button>
+        <button id="monitor-inc" style="padding:8px 18px;font-size:16px;">+10</button>
+        <button id="monitor-random" style="padding:8px 18px;font-size:16px;">🎲 随机</button>
+      </div>
+      <div style="margin-top:10px;font-size:13px;color:#888;">提示：设阈值 上限150/下限50（或基准100 ±10%），点击 +10/−10 越界观察提醒</div>
+    </div>
+  </div>
+
   <!-- 状态提示 -->
   <div class="status-box">
     <strong>📌 使用提示：</strong><br>
@@ -411,6 +426,21 @@
   document.getElementById('native-select').addEventListener('change', function() {
     console.log('选择了：', this.value);
   });
+
+  // ---- OCR 监控测试区 ----
+  let monitorVal = 100;
+  const monitorEl = document.getElementById('monitor-value');
+  function renderMonitorVal() {
+    monitorEl.textContent = '当前余额: ' + monitorVal;
+    monitorEl.style.color = monitorVal > 150 || monitorVal < 50 ? '#d32f2f' : '#1a73e8';
+  }
+  document.getElementById('monitor-inc').addEventListener('click', function() { monitorVal += 10; renderMonitorVal(); });
+  document.getElementById('monitor-dec').addEventListener('click', function() { monitorVal -= 10; renderMonitorVal(); });
+  document.getElementById('monitor-random').addEventListener('click', function() {
+    monitorVal = Math.max(0, monitorVal + Math.round((Math.random() - 0.5) * 120));
+    renderMonitorVal();
+  });
+  renderMonitorVal();
 
   console.log('✅ 测试页面加载完成，可以使用插件拾取器进行测试。');
 </script>

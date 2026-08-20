@@ -38,7 +38,25 @@
       sendResponse({ success: true });
       return false;
     }
+    if (message.type === 'monitorStatus') {
+      const { status } = message.payload;
+      monitorStates[status.id] = status;
+      renderMonitorStatus();
+      sendResponse({ success: true });
+      return false;
+    }
+    if (message.type === 'monitorAlert') {
+      const { kind, name, message: alertMsg, state } = message.payload;
+      ensureFloatingBar(0);
+      flashAlert(state, alertMsg || name || '');
+      sendResponse({ success: true });
+      return false;
+    }
   });
+
+  let monitorStates = {};
+  let alertFlashTimer = null;
+  let alertFlashOn = false;
 
   // ---------- 浮窗 ----------
   function ensureFloatingBar(total) {
@@ -66,6 +84,7 @@
     bar.innerHTML = `
       <span id="mch-progress">⏳ 0/${total}</span>
       <span id="mch-remaining">执行中...</span>
+      <span id="mch-monitor-status" style="display:none;font-size:12px;color:#4caf50;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
       <button id="mch-pause" style="
         background: #f5a623;
         border: none;
@@ -127,6 +146,54 @@
       floatingBar = null;
     }
     paused = false;
+    monitorStates = {};
+    if (alertFlashTimer) {
+      clearInterval(alertFlashTimer);
+      alertFlashTimer = null;
+    }
+  }
+
+  // ---------- 监控状态展示 ----------
+  function renderMonitorStatus() {
+    if (!floatingBar) return;
+    const el = document.getElementById('mch-monitor-status');
+    if (!el) return;
+    const entries = Object.values(monitorStates);
+    if (entries.length === 0) {
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
+    const parts = entries.map(s => {
+      const v = s.parse === 'text' || s.lastValue === null || s.lastValue === undefined ? (s.lastRawText || '—') : s.lastValue;
+      const mark = s.alertState === 'high' ? '⚠高' : (s.alertState === 'low' ? '⚠低' : '');
+      return `${s.name || '监控'}: ${v}${mark}`;
+    });
+    const alerted = entries.some(s => s.alertState === 'high' || s.alertState === 'low');
+    el.style.display = 'inline';
+    el.textContent = `📡 ${parts.join(' | ')}`;
+    el.style.color = alerted ? '#ff5252' : '#4caf50';
+    el.style.fontWeight = alerted ? 'bold' : 'normal';
+  }
+
+  function flashAlert(state, text) {
+    if (!floatingBar) return;
+    const el = document.getElementById('mch-monitor-status');
+    if (!el) return;
+    if (state === 'high' || state === 'low') {
+      const base = el.style;
+      if (alertFlashTimer) clearInterval(alertFlashTimer);
+      alertFlashOn = false;
+      alertFlashTimer = setInterval(() => {
+        alertFlashOn = !alertFlashOn;
+        if (!floatingBar) { clearInterval(alertFlashTimer); alertFlashTimer = null; return; }
+        el.style.background = alertFlashOn ? 'rgba(255,82,82,0.35)' : 'transparent';
+        el.style.color = alertFlashOn ? '#fff' : '#ff5252';
+        el.style.padding = alertFlashOn ? '1px 6px' : '0';
+        el.style.borderRadius = '4px';
+      }, 600);
+    }
+    el.textContent = `📡 ${text}`;
   }
 
   // ---------- 点击执行 ----------
