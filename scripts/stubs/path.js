@@ -1,0 +1,12 @@
+export default {};
+export const join = (...parts) => parts.join('/');
+export const resolve = (...parts) => parts.join('/');
+export const dirname = (p) => p.replace(/\/[^/]*$/, '') || '.';
+export const basename = (p) => p.split('/').pop();
+export const extname = (p) => { const b = p.split('/').pop(); const i = b.lastIndexOf('.'); return i < 0 ? '' : b.slice(i); };
+export const sep = '/';
+export const isAbsolute = () => false;
+export const normalize = (p) => p;
+export const relative = (from, to) => to;
+export const parse = (p) => ({ root: '', dir: dirname(p), base: basename(p), ext: extname(p), name: basename(p).replace(extname(p), '') });
+export const format = (o) => o.base || o.name + (o.ext || '');

@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "MouseClick Helper",
-  "version": "1.1.0",
-  "description": "自动化点击助手，支持坐标拾取、抗缩放回放、快捷键控制",
+  "version": "1.2.0",
+  "description": "自动化点击助手，支持坐标拾取、抗缩放回放、快捷键控制、OCR区域监控",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
     "tabs",
-    "offscreen"
+    "offscreen",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -16,6 +17,9 @@
   "background": {
     "service_worker": "background/service-worker.js",
     "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "action": {
     "default_popup": "popup/popup.html",
