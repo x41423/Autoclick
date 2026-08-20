@@ -2,6 +2,9 @@
 // 引擎胶水层：连接后台端口，驱动执行循环
 
 import { runEngine, createAbortableSleep } from './engine.js';
+import { createMonitorManager } from './monitor.js';
+import { validateMonitorAction } from './monitor-logic.js';
+import { initOcrOnce, recognizeOnce } from './ocr.js';
 
 const sleepCtrl = createAbortableSleep();
 
@@ -35,6 +38,75 @@ function log(level, message) {
   chrome.runtime.sendMessage({ type: 'log', payload: { level, tag: '[ENGINE]', message } }).catch(() => {});
 }
 
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d').drawImage(img, 0, 0);
+      resolve(c);
+    };
+    img.onerror = () => reject(new Error('图片解码失败'));
+    img.src = dataUrl;
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let audioCtx = null;
+function playAlertSound() {
+  try {
+    audioCtx = audioCtx || new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.value = 0.3;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.5);
+  } catch (e) {
+    log('WARN', `提示音播放失败: ${e.message}`);
+  }
+}
+
+function makeMonitorManager() {
+  return createMonitorManager({
+    captureVisibleTab: async () => {
+      const res = await callSW({ type: 'captureVisibleTab' }, 20000);
+      if (!res || !res.success || !res.dataUrl) {
+        const e = new Error(res?.error || '截屏失败');
+        e.code = 'CAPTURE';
+        throw e;
+      }
+      return res.dataUrl;
+    },
+    loadImage,
+    ocrReady: () => initOcrOnce(),
+    ocrRecognize: async (img) => {
+      const res = await recognizeOnce(img);
+      return (res && res.text) || [];
+    },
+    alert: (kind, payload) => {
+      if (payload.way === 'sound' || payload.way === 'both') playAlertSound();
+      callSW({ type: 'monitorAlert', kind, payload }, 5000).catch(() => {});
+    },
+    now: () => Date.now(),
+    sleep,
+    log,
+    onStatus: (status) => {
+      callSW({ type: 'monitorStatus', status }, 5000).catch(() => {});
+    }
+  });
+}
+
+let monitorManager = makeMonitorManager();
+
 async function startEngine() {
   const res = await callSW({ type: 'getExecutionState' });
   if (!res || !res.success || !res.state) throw new Error(res?.error || '无执行状态');
@@ -48,7 +120,14 @@ async function startEngine() {
     sleep: (ms, onTick) => sleepCtrl.sleep(ms, onTick),
     onTick: (index, total, remainingMs) => callSW({ type: 'barUpdate', index, total, remainingMs }, 5000),
     isAborted: () => port === null || sleepCtrl.isAborted(),
-    waitIfPaused: () => sleepCtrl.waitIfPaused()
+    waitIfPaused: () => sleepCtrl.waitIfPaused(),
+    startMonitor: async (index, action) => {
+      const r = validateMonitorAction(action);
+      if (!r.ok) throw new Error(`monitor 动作无效: ${r.errors.join('; ')}`);
+      monitorManager.startMonitor(index, action);
+      monitorManager.start(index);
+    },
+    stopMonitors: async () => { monitorManager.stopAll(); }
   };
 
   const { completed } = await runEngine(state, deps);
@@ -99,6 +178,7 @@ chrome.runtime.onConnect.addListener((p) => {
   p.onDisconnect.addListener(() => {
     port = null;
     sleepCtrl.abort();
+    monitorManager.stopAll();
     for (const [, resolve] of pending) {
       resolve({ success: false, error: '后台连接已断开' });
     }

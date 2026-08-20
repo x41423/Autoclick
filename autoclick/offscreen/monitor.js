@@ -54,12 +54,12 @@ export function createMonitorManager(deps) {
           const now = deps.now();
           if (newState !== m.alertState) {
             if (newState === 'normal') {
-              deps.alert('recover', { id: m.id, name: action.name, value, rawText, message: `${action.name ?? '监控'}已恢复正常（${value}）` });
+              deps.alert('recover', { id: m.id, name: action.name, value, rawText, way: action.alert.way, message: `${action.name ?? '监控'}已恢复正常（${value}）` });
               m.lastAlertAt = now;
               m.alertState = newState;
               log('INFO', `恢复提醒 ${action.name}：${value}`, { id: m.id, actionIndex: m.actionIndex });
             } else if (m.lastAlertAt === 0 || now - m.lastAlertAt >= action.alert.cooldownSec * 1000) {
-              deps.alert('enter', { id: m.id, name: action.name, value, rawText, state: newState, message: `${action.name ?? '监控'}${newState === 'high' ? '高于上限' : '低于下限'}（${value}）` });
+              deps.alert('enter', { id: m.id, name: action.name, value, rawText, state: newState, way: action.alert.way, message: `${action.name ?? '监控'}${newState === 'high' ? '高于上限' : '低于下限'}（${value}）` });
               m.lastAlertAt = now;
               m.alertState = newState;
               log('WARN', `越界提醒 ${action.name}：${value}（${newState === 'high' ? '高' : '低'}）`, { id: m.id, actionIndex: m.actionIndex });
@@ -77,7 +77,7 @@ export function createMonitorManager(deps) {
       if (m.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
         m.status = 'error';
         log('ERROR', `连续失败 ${m.consecutiveFailures} 次，哨兵暂停 ${BACKOFF_MS / 1000}s`, { id: m.id, actionIndex: m.actionIndex });
-        deps.alert('error', { id: m.id, name: action.name, message: `${action.name ?? '监控'}连续失败，已暂停 30 秒` });
+        deps.alert('error', { id: m.id, name: action.name, way: action.alert.way, message: `${action.name ?? '监控'}连续失败，已暂停 30 秒` });
         if (!m.stopped) await deps.sleep(BACKOFF_MS);
         m.status = 'active';
         doWait = false;
